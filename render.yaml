@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: gram-reaper
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build:all
+    startCommand: node dist/server/index.js
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: DATABASE_PATH
+        value: /data/gramreaper.db
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+    disk:
+      name: gram-reaper-data
+      mountPath: /data
+      sizeGB: 1
+    healthCheckPath: /health

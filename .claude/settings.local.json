@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Desktop_Commander__read_file",
+      "Bash(git config:*)",
+      "Bash(gh auth status:*)",
+      "Bash(npm install:*)",
+      "Bash(curl:*)",
+      "Bash(# Insert:*)",
+      "Bash(npm run build:client:*)",
+      "Bash(pkill:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}
