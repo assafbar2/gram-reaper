@@ -79,14 +79,15 @@ export async function parseFood(rawInput: string): Promise<ParseResult> {
     messages: [{ role: 'user', content: rawInput }]
   })
 
-  const text = response.content[0].type === 'text' ? response.content[0].text : '{}'
+  const rawText = response.content[0].type === 'text' ? response.content[0].text : ''
+  // Strip markdown code fences Claude sometimes wraps JSON in (```json ... ```)
+  const text = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()
   let parsed: { name: string; protein_g: number; calories: number | null; confidence: number; notes: string }
 
   try {
     parsed = JSON.parse(text)
   } catch {
-    // Fallback if Claude returns unexpected format
-    parsed = { name: rawInput, protein_g: 20, calories: null, confidence: 0.3, notes: 'Parse failed, estimated.' }
+    throw new Error(`Claude returned unparseable response: ${rawText.slice(0, 120)}`)
   }
 
   // Persist to foods table (cache for future hits)

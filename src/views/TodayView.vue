@@ -13,7 +13,7 @@
     </header>
 
     <!-- Main content -->
-    <div class="flex-1 px-5 space-y-6 overflow-y-auto">
+    <div class="flex-1 px-5 space-y-6 overflow-y-auto pb-40">
 
       <!-- Loading state -->
       <div v-if="store.loading && store.entries.length === 0" class="flex justify-center pt-16">
