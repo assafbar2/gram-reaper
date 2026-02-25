@@ -51,13 +51,13 @@ export async function parseFood(rawInput: string): Promise<ParseResult> {
   const normalized = normalize(rawInput)
 
   // 1. Exact cache hit
-  const exact = db.prepare('SELECT * FROM foods WHERE name_normalized = ?').get(normalized) as Food | undefined
+  const exact = db.prepare('SELECT * FROM foods WHERE name_normalized = ?').get(normalized) as unknown as Food | undefined
   if (exact) {
     return { food: exact, is_new: false, confidence: 1.0, notes: 'Exact match from history.' }
   }
 
   // 2. Fuzzy cache: check all normalized names, find any within distance 3
-  const allFoods = db.prepare('SELECT * FROM foods').all() as Food[]
+  const allFoods = db.prepare('SELECT * FROM foods').all() as unknown as Food[]
   let bestMatch: Food | null = null
   let bestDist = Infinity
   for (const f of allFoods) {
@@ -97,7 +97,7 @@ export async function parseFood(rawInput: string): Promise<ParseResult> {
       protein_g = excluded.protein_g,
       calories  = excluded.calories
     RETURNING *
-  `).get(parsed.name, normalize(parsed.name), parsed.protein_g, parsed.calories ?? null) as Food
+  `).get(parsed.name, normalize(parsed.name), parsed.protein_g, parsed.calories ?? null) as unknown as Food
 
   return { food, is_new: true, confidence: parsed.confidence, notes: parsed.notes }
 }
