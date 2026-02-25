@@ -40,5 +40,7 @@ export const endpoints = {
   getSettings: () => api.get<{ settings: Record<string, string> }>('/settings'),
 
   updateSettings: (body: { daily_goal_g?: number; timezone?: string }) =>
-    api.patch<{ settings: Record<string, string> }>('/settings', body)
+    api.patch<{ settings: Record<string, string> }>('/settings', body),
+
+  resetData: () => api.delete<{ ok: boolean }>('/settings/reset')
 }

@@ -32,6 +32,27 @@
       </button>
     </div>
 
+    <!-- Reset -->
+    <div class="surface-card p-4 space-y-3">
+      <h2 class="text-text text-sm font-medium">Reset</h2>
+      <p class="text-muted text-xs">Wipes all logs, history, and the food cache (quick-add cards). Cannot be undone.</p>
+      <button
+        v-if="!confirmingReset"
+        @click="confirmingReset = true"
+        class="text-danger text-sm border border-danger/30 rounded-lg px-4 py-2 hover:bg-danger/10 transition-colors"
+      >
+        Clear all history
+      </button>
+      <div v-else class="flex gap-3">
+        <button @click="confirmingReset = false" class="btn-ghost text-sm border border-white/10 rounded-lg px-4 py-2">
+          Cancel
+        </button>
+        <button @click="doReset" :disabled="resetting" class="text-danger text-sm border border-danger/50 bg-danger/10 rounded-lg px-4 py-2">
+          {{ resetting ? 'Clearing...' : 'Yes, clear everything' }}
+        </button>
+      </div>
+    </div>
+
     <!-- About -->
     <div class="surface-card p-4 space-y-2">
       <h2 class="text-text text-sm font-medium">About</h2>
@@ -65,6 +86,8 @@ const settings = useSettingsStore()
 const toast = useToastStore()
 const goalInput = ref(90)
 const saving = ref(false)
+const confirmingReset = ref(false)
+const resetting = ref(false)
 
 onMounted(async () => {
   await settings.fetchSettings()
@@ -80,6 +103,19 @@ async function saveGoal() {
     toast.error('Failed to save.')
   } finally {
     saving.value = false
+  }
+}
+
+async function doReset() {
+  resetting.value = true
+  try {
+    await endpoints.resetData()
+    confirmingReset.value = false
+    toast.success('All data cleared.')
+  } catch {
+    toast.error('Reset failed.')
+  } finally {
+    resetting.value = false
   }
 }
 

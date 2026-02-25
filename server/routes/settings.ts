@@ -26,4 +26,12 @@ router.patch('/', (req, res) => {
   res.json({ settings: Object.fromEntries(rows.map(r => [r.key, r.value])) })
 })
 
+// DELETE /api/settings/reset — wipe all logs, history, and food cache
+router.delete('/reset', (_req, res) => {
+  db.exec('DELETE FROM log_entries')
+  db.exec('DELETE FROM daily_summaries')
+  db.exec('DELETE FROM foods')
+  res.json({ ok: true })
+})
+
 export default router
