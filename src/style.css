@@ -9,8 +9,8 @@
   }
 
   html, body {
-    background-color: #0D0D0D;
-    color: #F2F2F2;
+    background-color: #C49A0A;
+    color: #0D0A00;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     margin: 0;
     padding: 0;
@@ -26,8 +26,8 @@
   /* Scrollbars */
   ::-webkit-scrollbar { width: 4px; height: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
-  ::-webkit-scrollbar-thumb:hover { background: #555; }
+  ::-webkit-scrollbar-thumb { background: #7A6200; border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: #5A4800; }
 }
 
 @layer components {
@@ -36,14 +36,14 @@
   }
 
   .surface-card {
-    @apply bg-surface rounded-xl border border-white/5;
+    @apply bg-surface rounded-xl border border-black/10;
   }
 
   .btn-primary {
-    @apply bg-accent text-black font-semibold px-4 py-2 rounded-lg hover:bg-yellow-400 active:scale-95 transition-all duration-150;
+    @apply bg-black/90 text-[#C49A0A] font-semibold px-4 py-2 rounded-lg hover:bg-black active:scale-95 transition-all duration-150;
   }
 
   .btn-ghost {
-    @apply text-muted hover:text-text px-3 py-2 rounded-lg hover:bg-white/5 active:scale-95 transition-all duration-150;
+    @apply text-muted hover:text-text px-3 py-2 rounded-lg hover:bg-black/10 active:scale-95 transition-all duration-150;
   }
 }

@@ -4,7 +4,7 @@
     <div
       v-if="goalMet"
       class="absolute inset-0 rounded-full opacity-20 blur-xl transition-opacity duration-1000"
-      style="background: radial-gradient(circle, #F5C518 0%, transparent 70%)"
+      style="background: radial-gradient(circle, #1A1400 0%, transparent 70%)"
     />
 
     <svg
@@ -20,7 +20,7 @@
         :cy="center"
         :r="radius"
         fill="none"
-        stroke="#222"
+        stroke="#8B7200"
         :stroke-width="strokeWidth"
       />
 
@@ -88,9 +88,9 @@ const dashOffset = computed(() => circumference.value * (1 - progress.value))
 
 // Color transitions: 0-60% gray, 60-99% yellow, 100%+ bright gold
 const ringColor = computed(() => {
-  if (progress.value >= 1) return '#FFD700'
-  if (progress.value >= 0.6) return '#F5C518'
-  return '#3D3D3D'
+  if (progress.value >= 1) return '#0D0A00'
+  if (progress.value >= 0.6) return '#2A1F00'
+  return '#7A6200'
 })
 
 // Position of the dot at the tip of the arc

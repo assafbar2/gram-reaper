@@ -4,14 +4,14 @@ export default {
   theme: {
     extend: {
       colors: {
-        bg: '#0D0D0D',
-        surface: '#1A1A1A',
-        'surface-2': '#242424',
-        accent: '#F5C518',
-        'accent-dim': '#F5C51866',
-        text: '#F2F2F2',
-        muted: '#6B7280',
-        danger: '#EF4444'
+        bg: '#C49A0A',
+        surface: '#B38900',
+        'surface-2': '#9A7500',
+        accent: '#1A1400',
+        'accent-dim': '#1A140066',
+        text: '#0D0A00',
+        muted: '#5A4500',
+        danger: '#7A1500'
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
@@ -24,9 +24,9 @@ export default {
       },
       keyframes: {
         'ring-pulse': {
-          '0%': { filter: 'drop-shadow(0 0 0px #F5C518)' },
-          '50%': { filter: 'drop-shadow(0 0 12px #F5C518)' },
-          '100%': { filter: 'drop-shadow(0 0 4px #F5C51866)' }
+          '0%': { filter: 'drop-shadow(0 0 0px #1A1400)' },
+          '50%': { filter: 'drop-shadow(0 0 12px #1A1400)' },
+          '100%': { filter: 'drop-shadow(0 0 4px #1A140066)' }
         },
         'fade-up': {
           '0%': { opacity: '0', transform: 'translateY(8px)' },

@@ -3,7 +3,7 @@
     <router-view />
 
     <!-- Bottom navigation -->
-    <nav class="fixed bottom-0 left-0 right-0 bg-bg border-t border-white/5 flex justify-around items-center h-14 z-40"
+    <nav class="fixed bottom-0 left-0 right-0 bg-bg border-t border-black/10 flex justify-around items-center h-14 z-40"
          style="padding-bottom: env(safe-area-inset-bottom)">
       <router-link to="/" class="nav-item" :class="{ active: route.name === 'today' }">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -53,6 +53,6 @@ const route = useRoute()
   transition: stroke 0.15s;
 }
 .nav-item.active svg {
-  stroke: #F5C518;
+  stroke: #1A1400;
 }
 </style>
