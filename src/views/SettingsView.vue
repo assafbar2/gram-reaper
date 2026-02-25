@@ -56,6 +56,7 @@
     <!-- About -->
     <div class="surface-card p-4 space-y-2">
       <h2 class="text-text text-sm font-medium">About</h2>
+      <p class="text-muted text-xs font-mono">v0.2 · {{ buildDate }}</p>
       <p class="text-muted text-xs leading-relaxed">
         Gram Reaper — open source protein tracker.<br/>
         Built with Vue 3 + Express + SQLite.<br/>
@@ -77,13 +78,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useSettingsStore } from '@/stores/settings.store.js'
 import { useToastStore } from '@/stores/toast.store.js'
 import { endpoints } from '@/api/endpoints.js'
 
 const settings = useSettingsStore()
 const toast = useToastStore()
+const buildDate = computed(() =>
+  new Date(__BUILD_TIME__).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+)
 const goalInput = ref(90)
 const saving = ref(false)
 const confirmingReset = ref(false)

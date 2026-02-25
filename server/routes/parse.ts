@@ -16,8 +16,8 @@ router.post('/', async (req, res) => {
     res.json(result)
   } catch (err: any) {
     console.error('POST /api/parse error:', err)
-    const reason: string = err?.message ?? ''
-    const isAuthError = reason.includes('authentication') || reason.includes('invalid x-api-key') || reason.includes('API key')
+    const reason: string = (err?.message ?? '').toLowerCase()
+    const isAuthError = reason.includes('authentication') || reason.includes('invalid x-api-key') || reason.includes('api key')
     res.status(500).json({
       error: isAuthError ? 'API key missing or invalid — check ANTHROPIC_API_KEY' : 'Failed to parse food',
       code: isAuthError ? 'API_KEY_ERROR' : 'SERVER_ERROR'

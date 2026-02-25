@@ -54,10 +54,10 @@
     <!-- Center text -->
     <div class="absolute inset-0 flex flex-col items-center justify-center">
       <span class="font-mono font-bold text-text leading-none" :style="{ fontSize: size * 0.18 + 'px' }">
-        {{ Math.round(total) }}<span class="text-muted" :style="{ fontSize: size * 0.07 + 'px' }">g</span>
+        {{ goalMet ? '✓' : Math.round(remaining) }}<span v-if="!goalMet" class="text-muted" :style="{ fontSize: size * 0.07 + 'px' }">g</span>
       </span>
       <span class="text-muted mt-1" :style="{ fontSize: size * 0.065 + 'px' }">
-        / {{ Math.round(goal) }}g
+        {{ goalMet ? 'goal met' : 'left' }}
       </span>
     </div>
   </div>
@@ -82,6 +82,7 @@ const center = computed(() => props.size / 2)
 const circumference = computed(() => 2 * Math.PI * radius.value)
 const progress = computed(() => Math.min(1, props.total / props.goal))
 const goalMet = computed(() => progress.value >= 1)
+const remaining = computed(() => Math.max(0, props.goal - props.total))
 
 const dashOffset = computed(() => circumference.value * (1 - progress.value))
 

@@ -34,6 +34,9 @@ export default defineConfig({
       '/health': 'http://localhost:3001'
     }
   },
+  define: {
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString())
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true
