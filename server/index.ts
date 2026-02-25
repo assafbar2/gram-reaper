@@ -38,7 +38,7 @@ app.use('/api/settings', settingsRouter)
 app.get('/health', (_req, res) => {
   try {
     db.prepare('SELECT 1').get()
-    res.json({ status: 'ok', db: 'connected', ts: new Date().toISOString() })
+    res.json({ status: 'ok', db: 'connected', version: '0.2', ts: new Date().toISOString() })
   } catch {
     res.status(500).json({ status: 'error', db: 'disconnected' })
   }
