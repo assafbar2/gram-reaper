@@ -9,8 +9,8 @@ export default {
         'surface-2': '#9A7500',
         accent: '#1A1400',
         'accent-dim': '#1A140066',
-        text: '#0D0A00',
-        muted: '#5A4500',
+        text: '#000000',
+        muted: '#2D1F00',
         danger: '#7A1500'
       },
       fontFamily: {
