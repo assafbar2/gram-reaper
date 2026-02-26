@@ -9,7 +9,7 @@
   }
 
   html, body {
-    background-color: #C49A0A;
+    background-color: #F5C518;
     color: #000000;
     font-weight: 500;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -41,7 +41,7 @@
   }
 
   .btn-primary {
-    @apply bg-black/90 text-[#C49A0A] font-semibold px-4 py-2 rounded-lg hover:bg-black active:scale-95 transition-all duration-150;
+    @apply bg-black/90 text-[#F5C518] font-semibold px-4 py-2 rounded-lg hover:bg-black active:scale-95 transition-all duration-150;
   }
 
   .btn-ghost {
