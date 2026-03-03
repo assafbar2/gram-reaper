@@ -50,6 +50,20 @@ function normalize(input: string): string {
 export async function parseFood(rawInput: string): Promise<ParseResult> {
   const normalized = normalize(rawInput)
 
+  // 0. Direct gram entry: input is just a number followed by 'g' (e.g. "10g", "12G", "14 g")
+  const directMatch = rawInput.trim().match(/^(\d+(?:\.\d+)?)\s*[gG]$/)
+  if (directMatch) {
+    const proteinG = parseFloat(directMatch[1])
+    const name = `${proteinG}g`
+    const food = db.prepare(`
+      INSERT INTO foods (name, name_normalized, protein_g, calories, source)
+      VALUES (?, ?, ?, NULL, 'direct')
+      ON CONFLICT (name_normalized) DO UPDATE SET protein_g = excluded.protein_g
+      RETURNING *
+    `).get(name, name, proteinG) as unknown as Food
+    return { food, is_new: false, confidence: 1.0, notes: 'Direct gram entry.' }
+  }
+
   // 1. Exact cache hit
   const exact = db.prepare('SELECT * FROM foods WHERE name_normalized = ?').get(normalized) as unknown as Food | undefined
   if (exact) {

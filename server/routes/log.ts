@@ -33,10 +33,10 @@ router.post('/', async (req, res) => {
     }
 
     const entry = db.prepare(`
-      INSERT INTO log_entries (food_id, logged_date, quantity, protein_g, raw_input)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO log_entries (food_id, logged_date, logged_at, quantity, protein_g, raw_input)
+      VALUES (?, ?, ?, ?, ?, ?)
       RETURNING *
-    `).get(foodId, logDate, quantity, proteinG, raw_input ?? null) as any
+    `).get(foodId, logDate, new Date().toISOString(), quantity, proteinG, raw_input ?? null) as any
 
     // Join food name for the response
     const food = db.prepare('SELECT name FROM foods WHERE id = ?').get(foodId) as { name: string }

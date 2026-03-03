@@ -56,7 +56,7 @@
     <!-- About -->
     <div class="surface-card p-4 space-y-2">
       <h2 class="text-text text-sm font-medium">About</h2>
-      <p class="text-muted text-xs font-mono">v0.2 · {{ buildDate }}</p>
+      <p class="text-muted text-xs font-mono">v0.3 · {{ buildDate }}</p>
       <p class="text-muted text-xs leading-relaxed">
         Gram Reaper — open source protein tracker.<br/>
         Built with Vue 3 + Express + SQLite.<br/>
