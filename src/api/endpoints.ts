@@ -42,5 +42,10 @@ export const endpoints = {
   updateSettings: (body: { daily_goal_g?: number; timezone?: string }) =>
     api.patch<{ settings: Record<string, string> }>('/settings', body),
 
-  resetData: () => api.delete<{ ok: boolean }>('/settings/reset')
+  // Confirmation phrase is required by the server; see routes/settings.ts.
+  resetData: () =>
+    api.delete<{ ok: boolean; deleted: { entries: number; days: number; foods: number } }>(
+      '/settings/reset',
+      { confirm: 'DELETE EVERYTHING' }
+    )
 }

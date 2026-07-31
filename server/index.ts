@@ -12,8 +12,12 @@ import parseRouter from './routes/parse.js'
 import historyRouter from './routes/history.js'
 import foodsRouter from './routes/foods.js'
 import settingsRouter from './routes/settings.js'
+import authRouter from './routes/auth.js'
 import { db } from './db.js'
 import { isApiKeyConfigured, PARSE_MODEL } from './llm.js'
+import { allowedEmailCount, getSessionEmail, isAuthConfigured, requireAuth } from './auth.js'
+import { renderLoginPage } from './loginPage.js'
+import { rateLimit } from './rateLimit.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = parseInt(process.env.PORT ?? '3001')
@@ -36,16 +40,30 @@ app.use(compression())
 app.use(express.json())
 
 if (!IS_PROD) {
-  app.use(cors({ origin: 'http://localhost:5173' }))
+  // credentials:true so the dev client on :5173 can send the session cookie.
+  app.use(cors({ origin: 'http://localhost:5173', credentials: true }))
 }
 
-// ─── API routes ───────────────────────────────────────────────────────────────
-app.use('/api/today', todayRouter)
-app.use('/api/log', logRouter)
-app.use('/api/parse', parseRouter)
-app.use('/api/history', historyRouter)
-app.use('/api/foods', foodsRouter)
-app.use('/api/settings', settingsRouter)
+// ─── Auth (public: this is how you get a session) ─────────────────────────────
+app.use('/api/auth', authRouter)
+
+// ─── API routes (all gated) ───────────────────────────────────────────────────
+// requireAuth fails closed — if auth config is missing, requests are refused
+// rather than served, so a misconfigured deploy is locked, not wide open.
+app.use('/api/today', requireAuth, todayRouter)
+app.use('/api/log', requireAuth, logRouter)
+// Parsing is the only route that costs money, so it carries a spend cap on top
+// of auth: 30/min and 300/hour is far above real use, far below abuse.
+app.use(
+  '/api/parse',
+  requireAuth,
+  rateLimit({ windowMs: 60_000, max: 30, message: 'Too many parse requests — slow down.' }),
+  rateLimit({ windowMs: 3_600_000, max: 300, message: 'Hourly parse limit reached.' }),
+  parseRouter
+)
+app.use('/api/history', requireAuth, historyRouter)
+app.use('/api/foods', requireAuth, foodsRouter)
+app.use('/api/settings', requireAuth, settingsRouter)
 
 // Health check for Render
 app.get('/health', (_req, res) => {
@@ -56,6 +74,9 @@ app.get('/health', (_req, res) => {
       db: 'connected',
       // Reports whether the key is present, never its value.
       llm_key: isApiKeyConfigured() ? 'configured' : 'missing',
+      // Presence and count only — never which addresses are allowed.
+      auth: isAuthConfigured() ? 'configured' : 'missing',
+      allowed_accounts: allowedEmailCount(),
       model: PARSE_MODEL,
       version: VERSION,
       ts: new Date().toISOString()
@@ -68,6 +89,15 @@ app.get('/health', (_req, res) => {
 // ─── Static files (production) ────────────────────────────────────────────────
 if (IS_PROD) {
   const staticPath = path.join(__dirname, '../../dist')
+
+  // Gate the page itself, ahead of express.static: an unauthenticated visitor
+  // receives only the sign-in page, never the app bundle or its assets.
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next()
+    if (getSessionEmail(req)) return next()
+    res.status(200).type('html').send(renderLoginPage())
+  })
+
   app.use(express.static(staticPath, { maxAge: '1d' }))
   app.get('*', (_req, res) => {
     res.sendFile(path.join(staticPath, 'index.html'))
@@ -76,6 +106,15 @@ if (IS_PROD) {
 
 app.listen(PORT, () => {
   console.log(`Gram Reaper v${VERSION} running on port ${PORT} [${IS_PROD ? 'production' : 'development'}]`)
+  if (isAuthConfigured()) {
+    console.log(`Auth: Google sign-in enabled, ${allowedEmailCount()} allowed account(s)`)
+  } else {
+    console.error(
+      '\n  ⛔ AUTH IS NOT CONFIGURED — every API route will refuse requests (503).\n' +
+      '     Required: GOOGLE_CLIENT_ID, ALLOWED_EMAILS, SESSION_SECRET\n' +
+      '     Fly.io: fly secrets set GOOGLE_CLIENT_ID=... ALLOWED_EMAILS=you@gmail.com SESSION_SECRET=$(openssl rand -base64 32)\n'
+    )
+  }
   if (isApiKeyConfigured()) {
     console.log(`OpenRouter: key configured, model ${PARSE_MODEL}`)
   } else {

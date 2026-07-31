@@ -1,5 +1,11 @@
 <template>
-  <div class="min-h-dvh bg-bg text-text">
+  <!-- Nothing renders until the session is resolved, so the app never flashes
+       before bouncing to sign-in. -->
+  <div v-if="!auth.ready" class="min-h-dvh bg-bg" />
+
+  <LoginView v-else-if="!auth.authenticated" />
+
+  <div v-else class="min-h-dvh bg-bg text-text">
     <router-view />
 
     <!-- Bottom navigation -->
@@ -36,10 +42,16 @@
 </template>
 
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import ToastContainer from '@/components/shared/ToastContainer.vue'
+import LoginView from '@/views/LoginView.vue'
+import { useAuthStore } from '@/stores/auth.store.js'
 
 const route = useRoute()
+const auth = useAuthStore()
+
+onMounted(() => auth.check())
 </script>
 
 <style scoped>

@@ -53,6 +53,20 @@
       </div>
     </div>
 
+    <!-- Account -->
+    <div class="surface-card p-4 space-y-3">
+      <h2 class="text-text text-sm font-medium">Account</h2>
+      <p class="text-muted text-xs">
+        Signed in as <span class="font-mono">{{ auth.email ?? 'unknown' }}</span>
+      </p>
+      <button
+        @click="auth.signOut()"
+        class="text-sm border border-black/20 rounded-lg px-4 py-2 hover:bg-black/5 transition-colors"
+      >
+        Sign out
+      </button>
+    </div>
+
     <!-- About -->
     <div class="surface-card p-4 space-y-2">
       <h2 class="text-text text-sm font-medium">About</h2>
@@ -81,10 +95,12 @@
 import { ref, computed, onMounted } from 'vue'
 import { useSettingsStore } from '@/stores/settings.store.js'
 import { useToastStore } from '@/stores/toast.store.js'
+import { useAuthStore } from '@/stores/auth.store.js'
 import { endpoints } from '@/api/endpoints.js'
 
 const settings = useSettingsStore()
 const toast = useToastStore()
+const auth = useAuthStore()
 const buildDate = computed(() =>
   new Date(__BUILD_TIME__).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 )

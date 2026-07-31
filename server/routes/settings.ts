@@ -40,12 +40,29 @@ router.patch('/', (req, res) => {
   }
 })
 
-// DELETE /api/settings/reset — wipe all logs, history, and food cache
-router.delete('/reset', (_req, res) => {
+// DELETE /api/settings/reset — wipe all logs, history, and food cache.
+// Requires an explicit confirmation phrase in the body: this is irreversible,
+// and a bare DELETE to a guessed path shouldn't be able to destroy everything.
+router.delete('/reset', (req, res) => {
+  if (req.body?.confirm !== 'DELETE EVERYTHING') {
+    return res.status(400).json({
+      error: 'Reset requires {"confirm":"DELETE EVERYTHING"} in the request body.',
+      code: 'CONFIRMATION_REQUIRED'
+    })
+  }
+
+  const counts = {
+    entries: (db.prepare('SELECT COUNT(*) AS n FROM log_entries').get() as { n: number }).n,
+    days: (db.prepare('SELECT COUNT(*) AS n FROM daily_summaries').get() as { n: number }).n,
+    foods: (db.prepare('SELECT COUNT(*) AS n FROM foods').get() as { n: number }).n
+  }
+
   db.exec('DELETE FROM log_entries')
   db.exec('DELETE FROM daily_summaries')
   db.exec('DELETE FROM foods')
-  res.json({ ok: true })
+
+  console.warn(`Data reset performed — removed ${JSON.stringify(counts)}`)
+  res.json({ ok: true, deleted: counts })
 })
 
 export default router
