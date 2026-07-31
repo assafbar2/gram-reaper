@@ -15,7 +15,7 @@ import settingsRouter from './routes/settings.js'
 import authRouter from './routes/auth.js'
 import { db } from './db.js'
 import { isApiKeyConfigured, PARSE_MODEL } from './llm.js'
-import { allowedEmailCount, getSessionEmail, isAuthConfigured, requireAuth } from './auth.js'
+import { accessCodeLength, hasValidSession, isAuthConfigured, requireAuth } from './auth.js'
 import { renderLoginPage } from './loginPage.js'
 import { rateLimit } from './rateLimit.js'
 
@@ -76,7 +76,7 @@ app.get('/health', (_req, res) => {
       llm_key: isApiKeyConfigured() ? 'configured' : 'missing',
       // Presence and count only — never which addresses are allowed.
       auth: isAuthConfigured() ? 'configured' : 'missing',
-      allowed_accounts: allowedEmailCount(),
+      code_length: accessCodeLength(),
       model: PARSE_MODEL,
       version: VERSION,
       ts: new Date().toISOString()
@@ -94,7 +94,7 @@ if (IS_PROD) {
   // receives only the sign-in page, never the app bundle or its assets.
   app.use((req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next()
-    if (getSessionEmail(req)) return next()
+    if (hasValidSession(req)) return next()
     res.status(200).type('html').send(renderLoginPage())
   })
 
@@ -107,12 +107,12 @@ if (IS_PROD) {
 app.listen(PORT, () => {
   console.log(`Gram Reaper v${VERSION} running on port ${PORT} [${IS_PROD ? 'production' : 'development'}]`)
   if (isAuthConfigured()) {
-    console.log(`Auth: Google sign-in enabled, ${allowedEmailCount()} allowed account(s)`)
+    console.log(`Auth: access code enabled (${accessCodeLength()} digits)`)
   } else {
     console.error(
       '\n  ⛔ AUTH IS NOT CONFIGURED — every API route will refuse requests (503).\n' +
-      '     Required: GOOGLE_CLIENT_ID, ALLOWED_EMAILS, SESSION_SECRET\n' +
-      '     Fly.io: fly secrets set GOOGLE_CLIENT_ID=... ALLOWED_EMAILS=you@gmail.com SESSION_SECRET=$(openssl rand -base64 32)\n'
+      '     Required: APP_ACCESS_CODE, SESSION_SECRET\n' +
+      '     Fly.io: fly secrets set APP_ACCESS_CODE=1234 SESSION_SECRET="$(openssl rand -base64 32)"\n'
     )
   }
   if (isApiKeyConfigured()) {

@@ -53,17 +53,17 @@
       </div>
     </div>
 
-    <!-- Account -->
+    <!-- Access -->
     <div class="surface-card p-4 space-y-3">
-      <h2 class="text-text text-sm font-medium">Account</h2>
+      <h2 class="text-text text-sm font-medium">Access</h2>
       <p class="text-muted text-xs">
-        Signed in as <span class="font-mono">{{ auth.email ?? 'unknown' }}</span>
+        This device is unlocked. Locking it will require the access code again here.
       </p>
       <button
         @click="auth.signOut()"
         class="text-sm border border-black/20 rounded-lg px-4 py-2 hover:bg-black/5 transition-colors"
       >
-        Sign out
+        Lock this device
       </button>
     </div>
 

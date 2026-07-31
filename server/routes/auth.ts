@@ -1,45 +1,40 @@
 import { Router } from 'express'
 import {
+  accessCodeLength,
   AuthError,
   clearSessionCookie,
-  getSessionEmail,
-  GOOGLE_CLIENT_ID,
+  hasValidSession,
   isAuthConfigured,
   setSessionCookie,
-  verifyGoogleIdToken
+  verifyAccessCode
 } from '../auth.js'
 
 const router = Router()
 
-// GET /api/auth/session — who am I? Used by the client on boot.
-// Also returns the Google client ID so the SPA doesn't need it baked in at
-// build time (it is public by design, and Fly secrets are runtime-only).
+// GET /api/auth/session — am I signed in? Used by the client on boot.
+// code_length lets the UI draw the right number of boxes; it isn't a secret.
 router.get('/session', (req, res) => {
   if (!isAuthConfigured()) {
     return res.status(503).json({ authenticated: false, code: 'AUTH_NOT_CONFIGURED' })
   }
-  const email = getSessionEmail(req)
-  res.json({ authenticated: email !== null, email, google_client_id: GOOGLE_CLIENT_ID })
+  res.json({ authenticated: hasValidSession(req), code_length: accessCodeLength() })
 })
 
-// POST /api/auth/google — exchange a Google ID token for a session cookie.
-router.post('/google', async (req, res) => {
-  const { credential } = req.body ?? {}
-  if (!credential || typeof credential !== 'string') {
-    return res.status(400).json({ error: 'credential is required', code: 'BAD_REQUEST' })
-  }
-
+// POST /api/auth/code — exchange the access code for a session cookie.
+router.post('/code', (req, res) => {
+  const ip = req.ip ?? 'unknown'
   try {
-    const email = await verifyGoogleIdToken(credential)
-    setSessionCookie(res, email)
-    res.json({ authenticated: true, email })
+    verifyAccessCode(req.body?.code, ip)
+    setSessionCookie(res)
+    res.json({ authenticated: true })
   } catch (err) {
     if (err instanceof AuthError) {
-      // Logged without the token itself, which is a bearer credential.
-      console.warn(`Sign-in refused (${err.status}): ${err.message}`)
+      if (err.retryAfterMs > 0) {
+        res.setHeader('Retry-After', Math.ceil(err.retryAfterMs / 1000))
+      }
       return res.status(err.status).json({ error: err.message, code: 'AUTH_REFUSED' })
     }
-    console.error('POST /api/auth/google error:', err)
+    console.error('POST /api/auth/code error:', err)
     res.status(500).json({ error: 'Sign-in failed', code: 'SERVER_ERROR' })
   }
 })

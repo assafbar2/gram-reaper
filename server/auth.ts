@@ -1,36 +1,87 @@
 import crypto from 'crypto'
 import type { Request, Response, NextFunction } from 'express'
-import { OAuth2Client } from 'google-auth-library'
 
-// Google Identity Services ID-token flow: the browser hands us a signed JWT and
-// we verify it server-side. Only the client ID is needed (it is public) — there
-// is no client secret to store or rotate.
-export const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID?.trim() ?? ''
-
-// Comma-separated allowlist, e.g. "you@gmail.com". Compared lowercase.
-const ALLOWED_EMAILS = new Set(
-  (process.env.ALLOWED_EMAILS ?? '')
-    .split(',')
-    .map(e => e.trim().toLowerCase())
-    .filter(Boolean)
-)
+// Access-code auth. A short code is only viable if guessing is expensive, so the
+// throttling below is load-bearing, not decoration: a 4-digit code is 10,000
+// combinations and would fall in seconds against an unthrottled endpoint.
+//
+// The code itself is never in the repo — it comes from the environment.
+// (Google sign-in with an email allowlist is a stronger option and is preserved
+// in git history at commit 0fa5d9d if you want to switch back.)
+const ACCESS_CODE = process.env.APP_ACCESS_CODE?.trim() ?? ''
 
 const SESSION_SECRET = process.env.SESSION_SECRET?.trim() ?? ''
 const SESSION_COOKIE = 'gr_session'
 const SESSION_TTL_MS = 90 * 24 * 60 * 60 * 1000 // 90 days
 
+// Per-IP: a handful of tries, then a lockout that grows with each failure.
+const IP_MAX_ATTEMPTS = 5
+const IP_BASE_LOCKOUT_MS = 60_000 // doubles per subsequent failure, capped below
+const IP_MAX_LOCKOUT_MS = 60 * 60_000
+// Global: bounds total guesses even if an attacker rotates IPs. 30/hour against
+// 10,000 combinations puts an exhaustive search at roughly two weeks.
+const GLOBAL_MAX_FAILURES_PER_HOUR = 30
+
 export function isAuthConfigured(): boolean {
-  return GOOGLE_CLIENT_ID.length > 0 && SESSION_SECRET.length > 0 && ALLOWED_EMAILS.size > 0
+  return ACCESS_CODE.length > 0 && SESSION_SECRET.length > 0
 }
 
-export function allowedEmailCount(): number {
-  return ALLOWED_EMAILS.size
+export function accessCodeLength(): number {
+  return ACCESS_CODE.length
+}
+
+// ─── Brute-force throttling ───────────────────────────────────────────────────
+
+interface IpState {
+  failures: number
+  lockedUntil: number
+}
+const ipState = new Map<string, IpState>()
+let globalFailures: number[] = []
+
+function lockoutFor(failures: number): number {
+  const over = Math.max(0, failures - IP_MAX_ATTEMPTS)
+  return Math.min(IP_BASE_LOCKOUT_MS * 2 ** over, IP_MAX_LOCKOUT_MS)
+}
+
+// Returns remaining lockout in ms, or 0 if the caller may attempt a code.
+export function throttleStatus(ip: string): number {
+  const now = Date.now()
+  globalFailures = globalFailures.filter(t => t > now - 3_600_000)
+
+  if (globalFailures.length >= GLOBAL_MAX_FAILURES_PER_HOUR) {
+    return globalFailures[0] + 3_600_000 - now
+  }
+  const state = ipState.get(ip)
+  if (state && state.lockedUntil > now) return state.lockedUntil - now
+  return 0
+}
+
+function recordFailure(ip: string): void {
+  const now = Date.now()
+  globalFailures.push(now)
+
+  const state = ipState.get(ip) ?? { failures: 0, lockedUntil: 0 }
+  state.failures += 1
+  if (state.failures >= IP_MAX_ATTEMPTS) {
+    state.lockedUntil = now + lockoutFor(state.failures)
+  }
+  ipState.set(ip, state)
+
+  if (ipState.size > 1000) {
+    for (const [k, v] of ipState) {
+      if (v.lockedUntil < now - IP_MAX_LOCKOUT_MS) ipState.delete(k)
+    }
+  }
+}
+
+function clearFailures(ip: string): void {
+  ipState.delete(ip)
 }
 
 // ─── Session cookie: "<base64url payload>.<hmac>" ─────────────────────────────
 
 interface SessionPayload {
-  email: string
   exp: number
 }
 
@@ -38,33 +89,27 @@ function sign(value: string): string {
   return crypto.createHmac('sha256', SESSION_SECRET).update(value).digest('base64url')
 }
 
-function createSessionToken(email: string): string {
-  const payload: SessionPayload = { email, exp: Date.now() + SESSION_TTL_MS }
+function createSessionToken(): string {
+  const payload: SessionPayload = { exp: Date.now() + SESSION_TTL_MS }
   const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url')
   return `${encoded}.${sign(encoded)}`
 }
 
-function verifySessionToken(token: string): SessionPayload | null {
+function verifySessionToken(token: string): boolean {
   const dot = token.lastIndexOf('.')
-  if (dot < 1) return null
+  if (dot < 1) return false
   const encoded = token.slice(0, dot)
-  const provided = token.slice(dot + 1)
-  const expected = sign(encoded)
 
   // Constant-time compare so a mismatch can't be probed byte-by-byte.
-  const a = Buffer.from(provided)
-  const b = Buffer.from(expected)
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null
+  const a = Buffer.from(token.slice(dot + 1))
+  const b = Buffer.from(sign(encoded))
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return false
 
   try {
     const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString()) as SessionPayload
-    if (typeof payload.exp !== 'number' || payload.exp < Date.now()) return null
-    // Re-check the allowlist on every request: revoking access by removing an
-    // address takes effect immediately, without waiting for cookies to expire.
-    if (!ALLOWED_EMAILS.has(payload.email.toLowerCase())) return null
-    return payload
+    return typeof payload.exp === 'number' && payload.exp >= Date.now()
   } catch {
-    return null
+    return false
   }
 }
 
@@ -79,11 +124,11 @@ function readCookie(req: Request, name: string): string | undefined {
   return undefined
 }
 
-export function setSessionCookie(res: Response, email: string): void {
-  res.cookie(SESSION_COOKIE, createSessionToken(email), {
+export function setSessionCookie(res: Response): void {
+  res.cookie(SESSION_COOKIE, createSessionToken(), {
     httpOnly: true, // not readable from JS, so XSS can't exfiltrate it
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax', // blocks cross-site form/fetch CSRF for state changes
+    sameSite: 'lax', // blocks cross-site CSRF for state changes
     maxAge: SESSION_TTL_MS,
     path: '/'
   })
@@ -93,67 +138,70 @@ export function clearSessionCookie(res: Response): void {
   res.clearCookie(SESSION_COOKIE, { path: '/' })
 }
 
-export function getSessionEmail(req: Request): string | null {
+export function hasValidSession(req: Request): boolean {
+  if (!isAuthConfigured()) return false
   const token = readCookie(req, SESSION_COOKIE)
-  if (!token) return null
-  return verifySessionToken(token)?.email ?? null
+  return token ? verifySessionToken(token) : false
 }
 
-// ─── Google ID token verification ─────────────────────────────────────────────
-
-const oauthClient = new OAuth2Client(GOOGLE_CLIENT_ID)
+// ─── Code verification ────────────────────────────────────────────────────────
 
 export class AuthError extends Error {
-  constructor(readonly status: number, message: string) {
+  constructor(readonly status: number, message: string, readonly retryAfterMs = 0) {
     super(message)
     this.name = 'AuthError'
   }
 }
 
-// Verifies the ID token and enforces the allowlist. Returns the email on
-// success; throws AuthError otherwise.
-export async function verifyGoogleIdToken(idToken: string): Promise<string> {
+// Throws AuthError on refusal; returns normally on success.
+export function verifyAccessCode(code: unknown, ip: string): void {
   if (!isAuthConfigured()) {
-    throw new AuthError(503, 'Sign-in is not configured on the server.')
+    throw new AuthError(503, 'Access code is not configured on the server.')
+  }
+  if (typeof code !== 'string' || code.length === 0) {
+    throw new AuthError(400, 'Code is required.')
   }
 
-  let payload
-  try {
-    // Checks signature, issuer, expiry, and that `aud` matches our client ID.
-    const ticket = await oauthClient.verifyIdToken({ idToken, audience: GOOGLE_CLIENT_ID })
-    payload = ticket.getPayload()
-  } catch {
-    throw new AuthError(401, 'Google sign-in could not be verified.')
+  const waitMs = throttleStatus(ip)
+  if (waitMs > 0) {
+    throw new AuthError(
+      429,
+      `Too many incorrect attempts. Try again in ${Math.ceil(waitMs / 1000)}s.`,
+      waitMs
+    )
   }
 
-  if (!payload?.email) throw new AuthError(401, 'Google account has no email address.')
-  // An unverified address could be attacker-controlled, so treat it as invalid
-  // even if the string happens to match the allowlist.
-  if (!payload.email_verified) throw new AuthError(403, 'This Google email is not verified.')
+  // Length is not secret (the client knows how many boxes to draw), so an
+  // early length check leaks nothing while keeping the compare constant-time.
+  const provided = Buffer.from(code.trim())
+  const expected = Buffer.from(ACCESS_CODE)
+  const ok = provided.length === expected.length && crypto.timingSafeEqual(provided, expected)
 
-  const email = payload.email.toLowerCase()
-  if (!ALLOWED_EMAILS.has(email)) {
-    // Deliberately does not reveal who *is* allowed.
-    throw new AuthError(403, 'This Google account is not authorised for this app.')
+  if (!ok) {
+    recordFailure(ip)
+    // Never log the submitted value.
+    console.warn(`Failed access-code attempt from ${ip}`)
+    throw new AuthError(401, 'Incorrect code.')
   }
-  return email
+
+  clearFailures(ip)
 }
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 
-// Guards everything except the sign-in route and /health. Fails closed: if the
+// Guards everything except the sign-in routes and /health. Fails closed: if the
 // server is missing its auth config, requests are refused rather than allowed.
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   if (!isAuthConfigured()) {
     res.status(503).json({
-      error: 'Server auth is not configured (GOOGLE_CLIENT_ID, ALLOWED_EMAILS, SESSION_SECRET).',
+      error: 'Server auth is not configured (APP_ACCESS_CODE, SESSION_SECRET).',
       code: 'AUTH_NOT_CONFIGURED'
     })
     return
   }
-  if (getSessionEmail(req)) {
+  if (hasValidSession(req)) {
     next()
     return
   }
-  res.status(401).json({ error: 'Sign-in required.', code: 'UNAUTHENTICATED' })
+  res.status(401).json({ error: 'Access code required.', code: 'UNAUTHENTICATED' })
 }

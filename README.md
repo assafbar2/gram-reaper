@@ -4,7 +4,7 @@
 
 A single-user protein tracking webapp. Log food by typing naturally or tapping quick-add cards. Track your streak toward a daily goal.
 
-**Live instance:** [gram-reaper.fly.dev](https://gram-reaper.fly.dev) *(private — sign-in restricted to the owner; deploy your own below)*
+**Live instance:** [gram-reaper.fly.dev](https://gram-reaper.fly.dev) *(private — access code required; deploy your own below)*
 
 ## Features
 
@@ -13,8 +13,8 @@ A single-user protein tracking webapp. Log food by typing naturally or tapping q
 - **Animated ring** — fills and turns dark as you hit your daily goal
 - **Streak tracking** — history calendar showing hits and misses
 - **Installable** — works as a PWA on iOS/Android, no App Store needed
-- **Private** — Google sign-in restricted to an email allowlist; unauthenticated
-  visitors get a sign-in page and never receive the app or its data
+- **Private** — access-code gate with brute-force lockout; unauthenticated
+  visitors get a lock screen and never receive the app or its data
 
 ## Stack
 
@@ -29,7 +29,7 @@ git clone https://github.com/assafbar2/gram-reaper
 cd gram-reaper
 npm install
 cp .env.example .env
-# Edit .env → add OPENROUTER_API_KEY, GOOGLE_CLIENT_ID, ALLOWED_EMAILS, SESSION_SECRET
+# Edit .env → add OPENROUTER_API_KEY, APP_ACCESS_CODE, SESSION_SECRET
 npm run dev
 ```
 
@@ -70,8 +70,7 @@ fly volumes create gram_reaper_data --size 1 --region <region>
 
 # 7. Set your API key (never committed to git)
 fly secrets set OPENROUTER_API_KEY=sk-or-v1-... \
-  GOOGLE_CLIENT_ID=your-id.apps.googleusercontent.com \
-  ALLOWED_EMAILS=you@gmail.com \
+  APP_ACCESS_CODE=your-code \
   SESSION_SECRET="$(openssl rand -base64 32)"
 
 # 8. Deploy
@@ -95,8 +94,7 @@ Add it as a GitHub secret named `FLY_API_TOKEN` → every push to `main` auto-de
 
 | Variable | Description | Default |
 |---|---|---|
-| `GOOGLE_CLIENT_ID` | Google OAuth client ID — **required** (public; no client secret needed) | — |
-| `ALLOWED_EMAILS` | Comma-separated Google accounts permitted to sign in — **required** | — |
+| `APP_ACCESS_CODE` | Access code required to open the app — **required** | — |
 | `SESSION_SECRET` | Signs the session cookie; `openssl rand -base64 32` — **required** | — |
 | `OPENROUTER_API_KEY` | OpenRouter API key — required | — |
 | `OPENROUTER_MODEL` | Model used for parsing | `x-ai/grok-4.5` |
