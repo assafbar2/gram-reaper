@@ -11,14 +11,14 @@
     "build:server": "tsc -p tsconfig.server.json",
     "build:all": "npm run build:client && npm run build:server",
     "start": "node --experimental-sqlite dist/server/index.js",
-    "lint": "eslint src server --ext .ts,.vue"
+    "typecheck": "tsc -p tsconfig.server.json --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.36.3",
-    "dotenv": "^16.4.5",
     "compression": "^1.7.4",
     "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
     "express": "^4.18.2",
+    "openai": "^7.3.0",
     "pinia": "^2.1.7",
     "vue": "^3.4.21",
     "vue-router": "^4.3.0"
@@ -34,7 +34,7 @@
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
     "tsx": "^4.7.1",
-    "typescript": "^5.4.2",
+    "typescript": "^5.9.3",
     "vite": "^5.1.6",
     "vite-plugin-pwa": "^0.19.8"
   }

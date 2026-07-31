@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { db } from '../db.js'
 import { getTodayDate, recomputeDailySummary } from '../services/summaryService.js'
 import { parseFood } from '../services/parseService.js'
+import { describeLlmError } from '../llm.js'
 
 const router = Router()
 
@@ -47,7 +48,8 @@ router.post('/', async (req, res) => {
     res.json({ entry: enrichedEntry, summary })
   } catch (err) {
     console.error('POST /api/log error:', err)
-    res.status(500).json({ error: 'Failed to log food', code: 'SERVER_ERROR' })
+    const { status, body } = describeLlmError(err, 'Failed to log food')
+    res.status(status).json(body)
   }
 })
 

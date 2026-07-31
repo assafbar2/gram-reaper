@@ -60,7 +60,7 @@
       <p class="text-muted text-xs leading-relaxed">
         Gram Reaper — open source protein tracker.<br/>
         Built with Vue 3 + Express + SQLite.<br/>
-        AI parsing powered by Claude.
+        AI parsing powered by Grok via OpenRouter.
       </p>
       <a
         href="https://github.com/assafbar2/gram-reaper"

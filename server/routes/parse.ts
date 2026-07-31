@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { parseFood } from '../services/parseService.js'
+import { describeLlmError } from '../llm.js'
 
 const router = Router()
 
@@ -14,19 +15,10 @@ router.post('/', async (req, res) => {
   try {
     const result = await parseFood(input.trim())
     res.json(result)
-  } catch (err: any) {
+  } catch (err) {
     console.error('POST /api/parse error:', err)
-    const reason: string = (err?.message ?? '').toLowerCase()
-    const isBillingError = reason.includes('credit balance') || reason.includes('billing')
-    const isAuthError = !isBillingError && (reason.includes('authentication') || reason.includes('invalid x-api-key') || reason.includes('api key'))
-    res.status(500).json({
-      error: isBillingError
-        ? 'API credits exhausted — add credits at console.anthropic.com/settings/billing'
-        : isAuthError
-          ? 'API key missing or invalid — check ANTHROPIC_API_KEY'
-          : 'Failed to parse food',
-      code: isBillingError ? 'BILLING_ERROR' : isAuthError ? 'API_KEY_ERROR' : 'SERVER_ERROR'
-    })
+    const { status, body } = describeLlmError(err, 'Failed to parse food')
+    res.status(status).json(body)
   }
 })
 

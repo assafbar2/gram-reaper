@@ -4,7 +4,22 @@ on:
     branches: [main]
 
 jobs:
+  # Gate the deploy on a clean build — previously any push to main went straight
+  # to production, so a type error could ship and only surface at runtime.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build:all
+
   deploy:
+    needs: build
     runs-on: ubuntu-latest
     concurrency: deploy-group
     steps:

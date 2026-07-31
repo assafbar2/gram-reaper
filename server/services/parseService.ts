@@ -1,24 +1,48 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { db, type Food } from '../db.js'
+import { getLlmClient, PARSE_MODEL } from '../llm.js'
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const SYSTEM_PROMPT = `You are a protein nutrition assistant. Given a food description, estimate its protein content.
 
-const SYSTEM_PROMPT = `You are a protein nutrition assistant. When given a food description, return ONLY a JSON object — no markdown, no explanation, no code fences.
-
-The JSON must have exactly these fields:
-- "name": string — clean, canonical food name (e.g. "Grilled Chicken Breast (2 pieces)", "In-N-Out Double-Double")
-- "protein_g": number — grams of protein as a decimal
-- "calories": number or null — estimated total calories
-- "confidence": number — 0.0 to 1.0 confidence in your protein estimate
-- "notes": string — one sentence explaining your estimate
+Field guidance:
+- "name": clean, canonical food name (e.g. "Grilled Chicken Breast (2 pieces)", "In-N-Out Double-Double")
+- "protein_g": grams of protein as a decimal
+- "calories": estimated total calories, or null if you cannot estimate
+- "confidence": 0.0 to 1.0 confidence in your protein estimate
+- "notes": one sentence explaining your estimate
 
 Rules:
 - For fast food chains (In-N-Out, McDonald's, etc.), use the restaurant's published nutrition data
 - For vague quantities like "ping pong size piece", treat as approximately 30-40g of the protein food
-- Always return a number for protein_g, never null or undefined
+- Always return a number for protein_g, never null
+- Respect the quantity in the input: "3 eggs" is three times "1 egg"
 - For eggs: 1 large egg = 6g protein
 - For chicken breast: ~31g protein per 100g cooked
 - For Greek yogurt (full cup): ~17-20g protein`
+
+// Structured-output contract. Grok 4.5 supports strict JSON schema enforcement
+// on OpenRouter, so the model cannot return prose or fenced markdown — which
+// removes the whole class of "unparseable response" failures.
+const RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    name: { type: 'string' },
+    protein_g: { type: 'number' },
+    calories: { type: ['number', 'null'] },
+    confidence: { type: 'number' },
+    notes: { type: 'string' }
+  },
+  // strict mode requires every property listed in `required`
+  required: ['name', 'protein_g', 'calories', 'confidence', 'notes'],
+  additionalProperties: false
+} as const
+
+interface ProteinEstimate {
+  name: string
+  protein_g: number
+  calories: number | null
+  confidence: number
+  notes: string
+}
 
 export interface ParseResult {
   food: Food
@@ -47,6 +71,22 @@ function normalize(input: string): string {
   return input.toLowerCase().trim().replace(/\s+/g, ' ')
 }
 
+// All digit runs in order, e.g. "2 eggs and 4 oz beef" -> "2,4".
+// Two descriptions with different quantities are different foods, never typos.
+function quantitySignature(input: string): string {
+  return (input.match(/\d+(?:\.\d+)?/g) ?? []).join(',')
+}
+
+// A fuzzy match is only safe when the edit distance is small *relative to the
+// length of what was typed*. A fixed threshold of 3 let "10 eggs" match
+// "2 eggs" (distance 2) and silently log a fifth of the protein.
+function isFuzzyMatch(input: string, candidate: string, distance: number): boolean {
+  if (quantitySignature(input) !== quantitySignature(candidate)) return false
+  const shorter = Math.min(input.length, candidate.length)
+  const allowed = Math.max(1, Math.floor(shorter * 0.15))
+  return distance <= allowed
+}
+
 export async function parseFood(rawInput: string): Promise<ParseResult> {
   const normalized = normalize(rawInput)
 
@@ -70,8 +110,9 @@ export async function parseFood(rawInput: string): Promise<ParseResult> {
     return { food: exact, is_new: false, confidence: 1.0, notes: 'Exact match from history.' }
   }
 
-  // 2. Fuzzy cache: check all normalized names, find any within distance 3
-  const allFoods = db.prepare('SELECT * FROM foods').all() as unknown as Food[]
+  // 2. Fuzzy cache: nearest name, accepted only if it clears isFuzzyMatch.
+  // Direct gram entries are excluded — "32g" is not a typo of anything.
+  const allFoods = db.prepare("SELECT * FROM foods WHERE source != 'direct'").all() as unknown as Food[]
   let bestMatch: Food | null = null
   let bestDist = Infinity
   for (const f of allFoods) {
@@ -81,27 +122,61 @@ export async function parseFood(rawInput: string): Promise<ParseResult> {
       bestMatch = f
     }
   }
-  if (bestMatch && bestDist <= 3) {
+  if (bestMatch && isFuzzyMatch(normalized, bestMatch.name_normalized, bestDist)) {
     return { food: bestMatch, is_new: false, confidence: 0.85, notes: 'Fuzzy match from history.' }
   }
 
-  // 3. Claude Haiku
-  const response = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 300,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: rawInput }]
+  // 3. Grok via OpenRouter — throws MissingApiKeyError if the key isn't configured
+  const completion = await getLlmClient().chat.completions.create({
+    model: PARSE_MODEL,
+    max_tokens: 1200, // headroom: reasoning tokens count toward this on Grok
+    reasoning_effort: 'low', // simple extraction; keeps latency and cost down
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: rawInput }
+    ],
+    response_format: {
+      type: 'json_schema',
+      json_schema: {
+        name: 'protein_estimate',
+        strict: true,
+        schema: RESPONSE_SCHEMA as unknown as Record<string, unknown>
+      }
+    },
+    // OpenRouter extension (not in the OpenAI type surface): only route to
+    // providers that honour the parameters above. Without it OpenRouter may
+    // fall back to a provider that ignores response_format and returns prose.
+    ...({ provider: { require_parameters: true } } as object)
   })
 
-  const rawText = response.content[0].type === 'text' ? response.content[0].text : ''
-  // Strip markdown code fences Claude sometimes wraps JSON in (```json ... ```)
-  const text = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()
-  let parsed: { name: string; protein_g: number; calories: number | null; confidence: number; notes: string }
+  const choice = completion.choices[0]
+  if (choice?.finish_reason === 'length') {
+    throw new Error('Model response was truncated before it produced a complete estimate.')
+  }
+  if (choice?.message.refusal) {
+    throw new Error(`Model declined to estimate this input: ${choice.message.refusal}`)
+  }
 
+  const text = choice?.message.content?.trim()
+  if (!text) {
+    throw new Error('Model returned an empty response.')
+  }
+
+  let parsed: ProteinEstimate
   try {
     parsed = JSON.parse(text)
   } catch {
-    throw new Error(`Claude returned unparseable response: ${rawText.slice(0, 120)}`)
+    throw new Error(`Model returned unparseable JSON: ${text.slice(0, 120)}`)
+  }
+
+  // Schema enforcement guarantees the shape, not the semantics — a negative or
+  // non-finite protein value would corrupt every downstream total.
+  if (!Number.isFinite(parsed.protein_g) || parsed.protein_g < 0) {
+    throw new Error(`Model returned an invalid protein value: ${parsed.protein_g}`)
+  }
+  const name = parsed.name?.trim()
+  if (!name) {
+    throw new Error('Model returned an empty food name.')
   }
 
   // Persist to foods table (cache for future hits)
@@ -112,7 +187,7 @@ export async function parseFood(rawInput: string): Promise<ParseResult> {
       protein_g = excluded.protein_g,
       calories  = excluded.calories
     RETURNING *
-  `).get(parsed.name, normalize(parsed.name), parsed.protein_g, parsed.calories ?? null) as unknown as Food
+  `).get(name, normalize(name), parsed.protein_g, parsed.calories ?? null) as unknown as Food
 
   return { food, is_new: true, confidence: parsed.confidence, notes: parsed.notes }
 }

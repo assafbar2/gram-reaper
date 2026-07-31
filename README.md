@@ -16,7 +16,7 @@ A single-user protein tracking webapp. Log food by typing naturally or tapping q
 
 ## Stack
 
-Vue 3 + Vite + TypeScript · Node.js + Express · SQLite · Claude Haiku · Tailwind CSS · Fly.io
+Vue 3 + Vite + TypeScript · Node.js + Express · SQLite · Grok 4.5 via OpenRouter · Tailwind CSS · Fly.io
 
 ---
 
@@ -27,13 +27,16 @@ git clone https://github.com/assafbar2/gram-reaper
 cd gram-reaper
 npm install
 cp .env.example .env
-# Edit .env → add your ANTHROPIC_API_KEY
+# Edit .env → add your OPENROUTER_API_KEY
 npm run dev
 ```
 
 Opens at `http://localhost:5173`. API runs on port `3001`.
 
-Get an API key at [console.anthropic.com](https://console.anthropic.com). A few dollars in credits lasts months at this usage rate (~$0.003/day).
+Get an API key at [openrouter.ai/settings/keys](https://openrouter.ai/settings/keys). A few dollars in credits lasts months at this usage rate.
+
+Parsing uses `x-ai/grok-4.5` by default. Override it with `OPENROUTER_MODEL` — any OpenRouter model
+that supports structured outputs will work.
 
 ---
 
@@ -64,7 +67,7 @@ fly volumes create gram_reaper_data --size 1 --region <region>
 # Pick a region close to you: ams, fra, lax, ord, sin, syd, etc.
 
 # 7. Set your API key (never committed to git)
-fly secrets set ANTHROPIC_API_KEY=sk-ant-...
+fly secrets set OPENROUTER_API_KEY=sk-or-v1-...
 
 # 8. Deploy
 fly deploy
@@ -87,7 +90,9 @@ Add it as a GitHub secret named `FLY_API_TOKEN` → every push to `main` auto-de
 
 | Variable | Description | Default |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Anthropic API key — required | — |
+| `OPENROUTER_API_KEY` | OpenRouter API key — required | — |
+| `OPENROUTER_MODEL` | Model used for parsing | `x-ai/grok-4.5` |
+| `OPENROUTER_SITE_URL` | Sent as `HTTP-Referer` for OpenRouter attribution | — |
 | `DATABASE_PATH` | Path to SQLite file | `/data/gramreaper.db` |
 | `PORT` | Server port | `8080` |
 | `NODE_ENV` | Environment | `development` |

@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { db } from '../db.js'
+import { isValidTimezone } from '../services/summaryService.js'
 
 const router = Router()
 
@@ -20,7 +21,15 @@ router.patch('/', (req, res) => {
     }
 
     if (timezone !== undefined) {
-      db.prepare("INSERT INTO settings (key, value) VALUES ('timezone', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value").run(timezone)
+      // Validated because getTodayDate/getLocalHour now depend on it — an
+      // unknown zone would otherwise throw a RangeError on every request.
+      if (typeof timezone !== 'string' || !isValidTimezone(timezone)) {
+        return res.status(400).json({
+          error: `Unknown timezone "${timezone}" — use an IANA name like "America/Los_Angeles".`,
+          code: 'BAD_REQUEST'
+        })
+      }
+      db.prepare("INSERT INTO settings (key, value) VALUES ('timezone', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value").run(timezone.trim())
     }
 
     const rows = db.prepare('SELECT key, value FROM settings').all() as Array<{ key: string; value: string }>

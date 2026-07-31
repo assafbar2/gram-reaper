@@ -1,13 +1,15 @@
 import { Router } from 'express'
 import { db } from '../db.js'
-import { getTodayDate } from '../services/summaryService.js'
+import { getTodayDate, shiftDate } from '../services/summaryService.js'
 
 const router = Router()
 
 // GET /api/history?limit=30&offset=0
 router.get('/', (req, res) => {
-  const limit = parseInt(req.query.limit as string) || 30
-  const offset = parseInt(req.query.offset as string) || 0
+  // Clamped: a negative LIMIT means "unbounded" in SQLite, and a negative
+  // OFFSET is a syntax-level surprise rather than an error.
+  const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 30, 1), 365)
+  const offset = Math.max(parseInt(req.query.offset as string) || 0, 0)
 
   const days = db.prepare(`
     SELECT * FROM daily_summaries
@@ -55,24 +57,24 @@ router.get('/:date', (req, res) => {
 })
 
 function computeStreak(): number {
-  const summaries = db.prepare(`
+  const rows = db.prepare(`
     SELECT date, goal_met FROM daily_summaries
     WHERE entry_count > 0
     ORDER BY date DESC
   `).all() as Array<{ date: string; goal_met: number }>
 
+  const metByDate = new Map(rows.map(r => [r.date, r.goal_met === 1]))
   const today = getTodayDate()
-  let streak = 0
-  let expected = today
 
-  for (const row of summaries) {
-    if (row.date !== expected) break
-    if (!row.goal_met) break
+  // Today is still in progress: if the goal isn't met yet, start counting from
+  // yesterday instead of returning 0. Previously the streak read as 0 every
+  // morning until the day's first entry crossed the goal.
+  let cursor = metByDate.get(today) ? today : shiftDate(today, -1)
+
+  let streak = 0
+  while (metByDate.get(cursor)) {
     streak++
-    // Subtract one day
-    const d = new Date(expected + 'T12:00:00')
-    d.setDate(d.getDate() - 1)
-    expected = d.toISOString().slice(0, 10)
+    cursor = shiftDate(cursor, -1)
   }
 
   return streak

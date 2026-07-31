@@ -6,7 +6,7 @@ services:
     buildCommand: npm install && npm run build:all
     startCommand: node --experimental-sqlite dist/server/index.js
     envVars:
-      - key: ANTHROPIC_API_KEY
+      - key: OPENROUTER_API_KEY
         sync: false
       - key: DATABASE_PATH
         value: /data/gramreaper.db
