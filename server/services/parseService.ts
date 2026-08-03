@@ -90,8 +90,14 @@ function isFuzzyMatch(input: string, candidate: string, distance: number): boole
 export async function parseFood(rawInput: string): Promise<ParseResult> {
   const normalized = normalize(rawInput)
 
-  // 0. Direct gram entry: input is just a number followed by 'g' (e.g. "10g", "12G", "14 g")
-  const directMatch = rawInput.trim().match(/^(\d+(?:\.\d+)?)\s*[gG]$/)
+  // 0. Direct gram entry: a number and a gram unit and nothing else, e.g.
+  // "10g", "12G", "14 g", "10gr", "10 gr", "25gram", "30 grams". Those are
+  // grams of protein, logged as-is with no AI call.
+  //
+  // The trailing $ is what separates this from a food description: "10 grams of
+  // chicken" has more after the unit, so it falls through to the LLM to work out
+  // the protein. Keep the anchor.
+  const directMatch = rawInput.trim().match(/^(\d+(?:\.\d+)?)\s*(?:g|gr|gram|grams)$/i)
   if (directMatch) {
     const proteinG = parseFloat(directMatch[1])
     const name = `${proteinG}g`
