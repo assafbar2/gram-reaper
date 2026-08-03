@@ -13,8 +13,8 @@ export const useAuthStore = defineStore('auth', () => {
   const authenticated = ref(false)
   // How many boxes to draw. Not a secret — the client has to know the length.
   const codeLength = ref(4)
-  // True when the server is missing APP_ACCESS_CODE / SESSION_SECRET, so
-  // signing in is impossible — say so rather than loop on failures.
+  // True when the server is missing APP_ACCESS_CODE, so signing in is
+  // impossible — say so rather than loop on failures.
   const notConfigured = ref(false)
 
   async function check(): Promise<void> {
@@ -32,7 +32,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // Exchange the access code for a session cookie. Throws ApiError on refusal
-  // so the view can show the server's message (including lockout wait times).
+  // so the view can show the server's message.
   async function signInWithCode(code: string): Promise<void> {
     const res = await api.post<SessionResponse>('/auth/code', { code })
     authenticated.value = res.authenticated

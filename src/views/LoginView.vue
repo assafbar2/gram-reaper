@@ -4,8 +4,7 @@
 
     <p v-if="auth.notConfigured" class="text-danger text-sm max-w-xs">
       Access code isn't configured on the server. Set
-      <code class="font-mono text-xs">APP_ACCESS_CODE</code> and
-      <code class="font-mono text-xs">SESSION_SECRET</code>, then redeploy.
+      <code class="font-mono text-xs">APP_ACCESS_CODE</code>, then redeploy.
     </p>
 
     <template v-else>

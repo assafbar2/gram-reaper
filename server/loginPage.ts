@@ -8,7 +8,7 @@ export function renderLoginPage(): string {
     return page(`
       <h1>Not configured</h1>
       <p class="msg">This deployment is missing its access code. Set
-      <code>APP_ACCESS_CODE</code> and <code>SESSION_SECRET</code>, then redeploy.</p>
+      <code>APP_ACCESS_CODE</code>, then redeploy.</p>
     `)
   }
 

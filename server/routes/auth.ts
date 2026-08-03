@@ -22,16 +22,12 @@ router.get('/session', (req, res) => {
 
 // POST /api/auth/code — exchange the access code for a session cookie.
 router.post('/code', (req, res) => {
-  const ip = req.ip ?? 'unknown'
   try {
-    verifyAccessCode(req.body?.code, ip)
+    verifyAccessCode(req.body?.code)
     setSessionCookie(res)
     res.json({ authenticated: true })
   } catch (err) {
     if (err instanceof AuthError) {
-      if (err.retryAfterMs > 0) {
-        res.setHeader('Retry-After', Math.ceil(err.retryAfterMs / 1000))
-      }
       return res.status(err.status).json({ error: err.message, code: 'AUTH_REFUSED' })
     }
     console.error('POST /api/auth/code error:', err)

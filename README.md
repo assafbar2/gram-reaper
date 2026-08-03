@@ -13,8 +13,8 @@ A single-user protein tracking webapp. Log food by typing naturally or tapping q
 - **Animated ring** — fills and turns dark as you hit your daily goal
 - **Streak tracking** — history calendar showing hits and misses
 - **Installable** — works as a PWA on iOS/Android, no App Store needed
-- **Private** — access-code gate with brute-force lockout; unauthenticated
-  visitors get a lock screen and never receive the app or its data
+- **Private** — access code re-entered every time you open the app;
+  unauthenticated visitors get a lock screen and never receive the app or its data
 
 ## Stack
 
@@ -29,7 +29,7 @@ git clone https://github.com/assafbar2/gram-reaper
 cd gram-reaper
 npm install
 cp .env.example .env
-# Edit .env → add OPENROUTER_API_KEY, APP_ACCESS_CODE, SESSION_SECRET
+# Edit .env → add OPENROUTER_API_KEY and APP_ACCESS_CODE
 npm run dev
 ```
 
@@ -69,9 +69,7 @@ fly volumes create gram_reaper_data --size 1 --region <region>
 # Pick a region close to you: ams, fra, lax, ord, sin, syd, etc.
 
 # 7. Set your API key (never committed to git)
-fly secrets set OPENROUTER_API_KEY=sk-or-v1-... \
-  APP_ACCESS_CODE=your-code \
-  SESSION_SECRET="$(openssl rand -base64 32)"
+fly secrets set OPENROUTER_API_KEY=sk-or-v1-... APP_ACCESS_CODE=your-code
 
 # 8. Deploy
 fly deploy
@@ -95,7 +93,6 @@ Add it as a GitHub secret named `FLY_API_TOKEN` → every push to `main` auto-de
 | Variable | Description | Default |
 |---|---|---|
 | `APP_ACCESS_CODE` | Access code required to open the app — **required** | — |
-| `SESSION_SECRET` | Signs the session cookie; `openssl rand -base64 32` — **required** | — |
 | `OPENROUTER_API_KEY` | OpenRouter API key — required | — |
 | `OPENROUTER_MODEL` | Model used for parsing | `x-ai/grok-4.5` |
 | `OPENROUTER_SITE_URL` | Sent as `HTTP-Referer` for OpenRouter attribution | — |

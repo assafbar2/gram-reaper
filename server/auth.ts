@@ -1,117 +1,30 @@
 import crypto from 'crypto'
 import type { Request, Response, NextFunction } from 'express'
 
-// Access-code auth. A short code is only viable if guessing is expensive, so the
-// throttling below is load-bearing, not decoration: a 4-digit code is 10,000
-// combinations and would fall in seconds against an unthrottled endpoint.
+// Access-code auth for a single-user app.
 //
-// The code itself is never in the repo — it comes from the environment.
-// (Google sign-in with an email allowlist is a stronger option and is preserved
-// in git history at commit 0fa5d9d if you want to switch back.)
+// The code lives in APP_ACCESS_CODE, never in the repo — this repo is public, so
+// a committed code would protect nothing.
+//
+// "Type it every time you open the app" falls out of two choices, so there is no
+// expiry logic and no second secret to configure:
+//   - the session token is random per process boot, so a restart or deploy
+//     invalidates it;
+//   - the cookie carries no expiry, so the browser drops it when it closes.
 const ACCESS_CODE = process.env.APP_ACCESS_CODE?.trim() ?? ''
 
-const SESSION_SECRET = process.env.SESSION_SECRET?.trim() ?? ''
 const SESSION_COOKIE = 'gr_session'
-const SESSION_TTL_MS = 90 * 24 * 60 * 60 * 1000 // 90 days
-
-// Per-IP: a handful of tries, then a lockout that grows with each failure.
-const IP_MAX_ATTEMPTS = 5
-const IP_BASE_LOCKOUT_MS = 60_000 // doubles per subsequent failure, capped below
-const IP_MAX_LOCKOUT_MS = 60 * 60_000
-// Global: bounds total guesses even if an attacker rotates IPs. 30/hour against
-// 10,000 combinations puts an exhaustive search at roughly two weeks.
-const GLOBAL_MAX_FAILURES_PER_HOUR = 30
+const SESSION_TOKEN = crypto.randomBytes(32).toString('base64url')
 
 export function isAuthConfigured(): boolean {
-  return ACCESS_CODE.length > 0 && SESSION_SECRET.length > 0
+  return ACCESS_CODE.length > 0
 }
 
 export function accessCodeLength(): number {
   return ACCESS_CODE.length
 }
 
-// ─── Brute-force throttling ───────────────────────────────────────────────────
-
-interface IpState {
-  failures: number
-  lockedUntil: number
-}
-const ipState = new Map<string, IpState>()
-let globalFailures: number[] = []
-
-function lockoutFor(failures: number): number {
-  const over = Math.max(0, failures - IP_MAX_ATTEMPTS)
-  return Math.min(IP_BASE_LOCKOUT_MS * 2 ** over, IP_MAX_LOCKOUT_MS)
-}
-
-// Returns remaining lockout in ms, or 0 if the caller may attempt a code.
-export function throttleStatus(ip: string): number {
-  const now = Date.now()
-  globalFailures = globalFailures.filter(t => t > now - 3_600_000)
-
-  if (globalFailures.length >= GLOBAL_MAX_FAILURES_PER_HOUR) {
-    return globalFailures[0] + 3_600_000 - now
-  }
-  const state = ipState.get(ip)
-  if (state && state.lockedUntil > now) return state.lockedUntil - now
-  return 0
-}
-
-function recordFailure(ip: string): void {
-  const now = Date.now()
-  globalFailures.push(now)
-
-  const state = ipState.get(ip) ?? { failures: 0, lockedUntil: 0 }
-  state.failures += 1
-  if (state.failures >= IP_MAX_ATTEMPTS) {
-    state.lockedUntil = now + lockoutFor(state.failures)
-  }
-  ipState.set(ip, state)
-
-  if (ipState.size > 1000) {
-    for (const [k, v] of ipState) {
-      if (v.lockedUntil < now - IP_MAX_LOCKOUT_MS) ipState.delete(k)
-    }
-  }
-}
-
-function clearFailures(ip: string): void {
-  ipState.delete(ip)
-}
-
-// ─── Session cookie: "<base64url payload>.<hmac>" ─────────────────────────────
-
-interface SessionPayload {
-  exp: number
-}
-
-function sign(value: string): string {
-  return crypto.createHmac('sha256', SESSION_SECRET).update(value).digest('base64url')
-}
-
-function createSessionToken(): string {
-  const payload: SessionPayload = { exp: Date.now() + SESSION_TTL_MS }
-  const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url')
-  return `${encoded}.${sign(encoded)}`
-}
-
-function verifySessionToken(token: string): boolean {
-  const dot = token.lastIndexOf('.')
-  if (dot < 1) return false
-  const encoded = token.slice(0, dot)
-
-  // Constant-time compare so a mismatch can't be probed byte-by-byte.
-  const a = Buffer.from(token.slice(dot + 1))
-  const b = Buffer.from(sign(encoded))
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return false
-
-  try {
-    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString()) as SessionPayload
-    return typeof payload.exp === 'number' && payload.exp >= Date.now()
-  } catch {
-    return false
-  }
-}
+// ─── Session cookie ───────────────────────────────────────────────────────────
 
 function readCookie(req: Request, name: string): string | undefined {
   const header = req.headers.cookie
@@ -125,11 +38,11 @@ function readCookie(req: Request, name: string): string | undefined {
 }
 
 export function setSessionCookie(res: Response): void {
-  res.cookie(SESSION_COOKIE, createSessionToken(), {
+  res.cookie(SESSION_COOKIE, SESSION_TOKEN, {
     httpOnly: true, // not readable from JS, so XSS can't exfiltrate it
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax', // blocks cross-site CSRF for state changes
-    maxAge: SESSION_TTL_MS,
+    // No maxAge on purpose: the browser drops it on close, forcing a re-entry.
     path: '/'
   })
 }
@@ -141,34 +54,30 @@ export function clearSessionCookie(res: Response): void {
 export function hasValidSession(req: Request): boolean {
   if (!isAuthConfigured()) return false
   const token = readCookie(req, SESSION_COOKIE)
-  return token ? verifySessionToken(token) : false
+  if (!token) return false
+
+  // Constant-time compare so a mismatch can't be probed byte-by-byte.
+  const a = Buffer.from(token)
+  const b = Buffer.from(SESSION_TOKEN)
+  return a.length === b.length && crypto.timingSafeEqual(a, b)
 }
 
 // ─── Code verification ────────────────────────────────────────────────────────
 
 export class AuthError extends Error {
-  constructor(readonly status: number, message: string, readonly retryAfterMs = 0) {
+  constructor(readonly status: number, message: string) {
     super(message)
     this.name = 'AuthError'
   }
 }
 
 // Throws AuthError on refusal; returns normally on success.
-export function verifyAccessCode(code: unknown, ip: string): void {
+export function verifyAccessCode(code: unknown): void {
   if (!isAuthConfigured()) {
     throw new AuthError(503, 'Access code is not configured on the server.')
   }
   if (typeof code !== 'string' || code.length === 0) {
     throw new AuthError(400, 'Code is required.')
-  }
-
-  const waitMs = throttleStatus(ip)
-  if (waitMs > 0) {
-    throw new AuthError(
-      429,
-      `Too many incorrect attempts. Try again in ${Math.ceil(waitMs / 1000)}s.`,
-      waitMs
-    )
   }
 
   // Length is not secret (the client knows how many boxes to draw), so an
@@ -178,13 +87,9 @@ export function verifyAccessCode(code: unknown, ip: string): void {
   const ok = provided.length === expected.length && crypto.timingSafeEqual(provided, expected)
 
   if (!ok) {
-    recordFailure(ip)
     // Never log the submitted value.
-    console.warn(`Failed access-code attempt from ${ip}`)
     throw new AuthError(401, 'Incorrect code.')
   }
-
-  clearFailures(ip)
 }
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
@@ -194,7 +99,7 @@ export function verifyAccessCode(code: unknown, ip: string): void {
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   if (!isAuthConfigured()) {
     res.status(503).json({
-      error: 'Server auth is not configured (APP_ACCESS_CODE, SESSION_SECRET).',
+      error: 'Server auth is not configured (APP_ACCESS_CODE).',
       code: 'AUTH_NOT_CONFIGURED'
     })
     return

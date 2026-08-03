@@ -111,8 +111,9 @@ app.listen(PORT, () => {
   } else {
     console.error(
       '\n  ⛔ AUTH IS NOT CONFIGURED — every API route will refuse requests (503).\n' +
-      '     Required: APP_ACCESS_CODE, SESSION_SECRET\n' +
-      '     Fly.io: fly secrets set APP_ACCESS_CODE=1234 SESSION_SECRET="$(openssl rand -base64 32)"\n'
+      '     Required: APP_ACCESS_CODE\n' +
+      '     Local:  add APP_ACCESS_CODE=1234 to .env\n' +
+      '     Fly.io: fly secrets set APP_ACCESS_CODE=1234\n'
     )
   }
   if (isApiKeyConfigured()) {
