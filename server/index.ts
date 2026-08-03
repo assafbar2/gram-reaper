@@ -90,11 +90,33 @@ app.get('/health', (_req, res) => {
 if (IS_PROD) {
   const staticPath = path.join(__dirname, '../../dist')
 
+  // PWA plumbing has to stay reachable while locked. Gating it meant an
+  // installed PWA fetched HTML where it expected a service worker, so the
+  // update silently failed and the phone kept booting whatever stale shell it
+  // had — with no way to reach the code prompt. None of these carry user data;
+  // the app bundle under /assets is deliberately NOT on this list.
+  const PWA_SHELL =
+    /^\/(sw\.js|registerSW\.js|workbox-[\w-]+\.js|manifest\.webmanifest|icon-\d+\.png|favicon\.ico|apple-touch-icon\.png)$/
+
   // Gate the page itself, ahead of express.static: an unauthenticated visitor
   // receives only the sign-in page, never the app bundle or its assets.
   app.use((req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next()
+    if (PWA_SHELL.test(req.path)) return next()
     if (hasValidSession(req)) return next()
+
+    // Only a page navigation gets the lock screen. Anything else gets a bare
+    // 404, because a 200 carrying HTML is worse than useless here: the service
+    // worker would precache the lock page under an asset URL and then serve it
+    // back as JavaScript once signed in.
+    const navigating =
+      req.get('Sec-Fetch-Mode') === 'navigate' ||
+      (req.get('Accept') ?? '').includes('text/html')
+
+    if (!navigating) {
+      res.status(404).end()
+      return
+    }
     res.status(200).type('html').send(renderLoginPage())
   })
 

@@ -8,6 +8,14 @@ export default defineConfig({
     vue(),
     VitePWA({
       registerType: 'autoUpdate',
+      workbox: {
+        // Navigations must reach the server, or the access-code gate can never
+        // run: the installed PWA would boot a cached app shell and have no way
+        // to ask for the code. vite-plugin-pwa defaults navigateFallback to
+        // index.html, which is exactly that failure. Assets stay precached, so
+        // only the initial navigation needs the network.
+        navigateFallback: undefined
+      },
       manifest: {
         name: 'Gram Reaper',
         short_name: 'Gram Reaper',
